@@ -1,0 +1,5 @@
+#/volatile/halla/sbs/sbs-gep/GEP_REPLAYS/GEP3/LH2/June8_2025/rootfiles/gep5_fullreplay_385*.root
+#/volatile/halla/sbs/sbs-gep/GEP_REPLAYS/GEP3/LH2/June8_2025/rootfiles/gep5_fullreplay_386*.root
+#/volatile/halla/sbs/sbs-gep/GEP_REPLAYS/GEP3/LH2/June8_2025/rootfiles/gep5_fullreplay_387*.root
+/volatile/halla/sbs/sbs-gep/GEP_REPLAYS/GEP3/LH2/June8_2025/rootfiles/gep5_fullreplay_388*.root
+#/volatile/halla/sbs/sbs-gep/GEP_REPLAYS/GEP3/LH2/June8_2025/rootfiles/gep5_fullreplay_389*.root
