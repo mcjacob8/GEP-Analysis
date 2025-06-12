@@ -45,6 +45,20 @@ void AddWrappedText(TPaveText* pt, const TString& text, int maxCharsPerLine = 60
   }
 }
 
+Double_t RejectFunc(Double_t *x, Double_t *par){
+  if (x[0] > -0.8 && x[0] < 0.8){
+    TF1::RejectPoint();
+    return 0;
+  }
+  return par[0] + par[1]*x[0] + par[2]*x[0]*x[0];
+}
+
+void FitBkgrSide( TH1D *htest){
+  TF1 *Bkgr = new TF1("Bkgr", RejectFunc, -5, 5, 3);
+  Bkgr->SetParameters(10, 0, -0.1);
+  htest->Fit(Bkgr, "R");
+}
+
 // Crudely fitting a gaussian and a polynomial to our data
 void FitGausQuad( TH1D *htest, double thresh=0.5 ){
   int binmax = htest->GetNbinsX();
@@ -68,20 +82,22 @@ void FitGausQuad( TH1D *htest, double thresh=0.5 ){
 }
 
 // Seperating out Gaussian component
-void GausOnly( vector<double> value ){
+TF1* GausOnly( vector<double> value ){
   TF1 *fitgaus = new TF1("fitgaus", "[0]*exp(-0.5*((x-[1])/[2])^2)", -1, 1);
   fitgaus->SetParameters(value[0], value[1], value[2]);
   fitgaus->SetNpx(1000);
   fitgaus->SetLineColor(kBlue);
-  fitgaus->Draw("same");
-  cout << "what the mean? " << value[1] << endl;
+  //fitgaus->Draw("same");
+  return fitgaus;
+}
 
+TF1* QuadOnly( vector<double> value ){
   TF1 *fitquad = new TF1("fitquad", "[0]+[1]*x+[2]*x^2", -1, 1);
   fitquad->SetParameters(value[3], value[4], value[5]);
   fitquad->SetNpx(1000);
   fitquad->SetLineColor(kMagenta);
   // fitquad->Draw("same");
-  
+  return fitquad;
 }
 
 
@@ -153,10 +169,10 @@ void GetElasticPeak( const char *configfilename, const char *outfilename="Elasti
   TFile *fout = new TFile(outfilename, "RECREATE");
 
   // Set up the histograms we want to look at:
-  TH1D *hdxECAL = new TH1D("hdxECAL", "heep.dxECAL after global cut; heep.dxECAL (m);", 200, -0.08, 0.08);
-  TH1D *hdyECAL = new TH1D("hdyECAL", "heep.dyECAL after global cut; heep.dyECAL (m);", 200, -0.08, 0.08);
+  TH1D *hdxECAL = new TH1D("hdxECAL", "heep.dxECAL after global cut; heep.dxECAL (m);", 200, -0.18, 0.18);
+  TH1D *hdyECAL = new TH1D("hdyECAL", "heep.dyECAL after global cut; heep.dyECAL (m);", 200, -0.18, 0.18);
 
-  TH2D *hdxECAL_v_dyECAL = new TH2D("hdxECAL_v_dyECAL", "heep.dxECAL vs heep.dyECAL ; heep.dyECAL (m); heep.dxECAL (m)", 100, -0.08, 0.08, 100, -0.08, 0.08);
+  TH2D *hdxECAL_v_dyECAL = new TH2D("hdxECAL_v_dyECAL", "heep.dxECAL vs heep.dyECAL ; heep.dyECAL (m); heep.dxECAL (m)", 100, -0.18, 0.18, 100, -0.18, 0.18);
 
   TH1D *hEdivP = new TH1D("hEdivP", "E/P after global cut; E/P;", 100, 0.0, 1.3);
 
@@ -196,19 +212,25 @@ void GetElasticPeak( const char *configfilename, const char *outfilename="Elasti
 
   // Let's fit curves to our histograms
   vector<double> hparX, hparY;
+
+  FitBkgrSide( hdxECAL);
+  TF1 *fitfuncX2 = (TF1*) (hdxECAL->GetListOfFunctions()->FindObject("Bkgr"));
   
   FitGausQuad( hdxECAL, 0.5);
   TF1 *fitfuncX = (TF1*) (hdxECAL->GetListOfFunctions()->FindObject("fitfunc"));
+  cout << "Bkgr test = " << fitfuncX->GetParameter(0) << endl;
   hparX.push_back(fitfuncX->GetParameter("Amp"));
   hparX.push_back(fitfuncX->GetParameter("Mean"));
   hparX.push_back(fitfuncX->GetParameter("Sigma"));
   hparX.push_back(fitfuncX->GetParameter("Offset"));
   hparX.push_back(fitfuncX->GetParameter("Slope"));
   hparX.push_back(fitfuncX->GetParameter("Square"));
-  cout << "Fit mean X = " << fitfuncX->GetParameter("Mean") << endl;
-  cout << "Fit sigma X = " << fitfuncX->GetParameter("Sigma") << endl;
-  cout << "Fit amp X = " << fitfuncX->GetParameter("Amp") << endl;
-  cout << "Fit mean X = " << hparX[1] << endl;
+  //cout << "Fit mean X = " << fitfuncX->GetParameter("Mean") << endl;
+  //cout << "Fit sigma X = " << fitfuncX->GetParameter("Sigma") << endl;
+  //cout << "Fit amp X = " << fitfuncX->GetParameter("Amp") << endl;
+  //cout << "Fit mean X = " << hparX[1] << endl;
+  TF1 *gausOnlyX = GausOnly(hparX);
+  TF1 *quadOnlyX = QuadOnly(hparX);
   
   FitGausQuad( hdyECAL, 0.5);
   TF1 *fitfuncY = (TF1*) (hdyECAL->GetListOfFunctions()->FindObject("fitfunc"));
@@ -218,17 +240,16 @@ void GetElasticPeak( const char *configfilename, const char *outfilename="Elasti
   hparY.push_back(fitfuncY->GetParameter("Offset"));
   hparY.push_back(fitfuncY->GetParameter("Slope"));
   hparY.push_back(fitfuncY->GetParameter("Square"));
-  //hparY[3] = fitfuncY->GetParameter("Offset");
-  //hparY[4] = fitfuncY->GetParameter("Slope");
-  //hparY[5] = fitfuncY->GetParameter("Square");
-  //GausOnly(hparY);
-  cout << "Fit mean Y = " << fitfuncY->GetParameter("Mean") << endl;
+  //cout << "Fit mean Y = " << fitfuncY->GetParameter("Mean") << endl;
+  TF1 *gausOnlyY = GausOnly(hparY);
+  TF1 *quadOnlyY = QuadOnly(hparY);
   
   // Make some plots for us to look at
   TCanvas *c1 = new TCanvas("c1","",1600,1200);
   c1->Divide(2,2);
-  c1->cd(1);    hdxECAL->Draw();    fitfuncX->Draw("same");    GausOnly(hparX);
-  c1->cd(2);    hdyECAL->Draw();    fitfuncY->Draw("same");    GausOnly(hparY);
+  c1->cd(1);    hdxECAL->Draw();    fitfuncX2->Draw("same");    //quadOnlyX->Draw("same");    gausOnlyX->Draw("same");
+  //fitfuncX->Draw("same");
+  c1->cd(2);    hdyECAL->Draw();    fitfuncY->Draw("same");    quadOnlyY->Draw("same");    gausOnlyY->Draw("same");
   c1->cd(3);    hdxECAL_v_dyECAL->Draw();
   c1->cd(4);    hEdivP->Draw();
   //c1->Update();
