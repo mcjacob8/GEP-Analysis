@@ -57,6 +57,7 @@ void FitBkgrSide( TH1D *htest){
   TF1 *Bkgr = new TF1("Bkgr", RejectFunc, -5, 5, 3);
   Bkgr->SetParameters(10, 0, -0.1);
   htest->Fit(Bkgr, "R");
+  htest->GetListOfFunctions()->Add(Bkgr);
 }
 
 // Crudely fitting a gaussian and a polynomial to our data
@@ -215,6 +216,12 @@ void GetElasticPeak( const char *configfilename, const char *outfilename="Elasti
 
   FitBkgrSide( hdxECAL);
   TF1 *fitfuncX2 = (TF1*) (hdxECAL->GetListOfFunctions()->FindObject("Bkgr"));
+  //hdxECAL->GetListOfFunctions();
+  if (!fitfuncX2){
+    cerr << "Not found!" << endl;
+  } else {
+    cout << "Yooooo" << endl;
+  }
   
   FitGausQuad( hdxECAL, 0.5);
   TF1 *fitfuncX = (TF1*) (hdxECAL->GetListOfFunctions()->FindObject("fitfunc"));
@@ -247,7 +254,7 @@ void GetElasticPeak( const char *configfilename, const char *outfilename="Elasti
   // Make some plots for us to look at
   TCanvas *c1 = new TCanvas("c1","",1600,1200);
   c1->Divide(2,2);
-  c1->cd(1);    hdxECAL->Draw();    fitfuncX2->Draw("same");    //quadOnlyX->Draw("same");    gausOnlyX->Draw("same");
+  c1->cd(1);    hdxECAL->Draw();    //fitfuncX2->Draw("same");    //quadOnlyX->Draw("same");    gausOnlyX->Draw("same");
   //fitfuncX->Draw("same");
   c1->cd(2);    hdyECAL->Draw();    fitfuncY->Draw("same");    quadOnlyY->Draw("same");    gausOnlyY->Draw("same");
   c1->cd(3);    hdxECAL_v_dyECAL->Draw();
