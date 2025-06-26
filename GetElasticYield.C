@@ -1,7 +1,7 @@
 // ******************************************************************************** //
-//                     Created by J.McMurtry on June 10th, 2025                     //
+//                     Created by J.McMurtry on June 25th, 2025                     //
 //                                                                                  //
-// Script to analyze elastic yields by applying a global cut and fitting the data   //
+// Script to analyze elastic yields normalized to charge and livetime corrections   //
 // ******************************************************************************** //
 
 #include "TChain.h"
@@ -58,7 +58,7 @@ Double_t RejectFunc(Double_t *x, Double_t *par){
 // Fit our background to the sides away from central peak
 TF1 *FitBkgrSide( TH1D *htest){
   TF1 *Bkgr = new TF1("Bkgr", RejectFunc, -5, 5, 3);
-  Bkgr->SetParameters(10, 0, -0.1);
+  Bkgr->SetParameters(0, 0, -0.1);
   Bkgr->SetNpx(1000);
   Bkgr->SetLineColor(kBlue);
   htest->Fit(Bkgr, "R");
@@ -84,12 +84,12 @@ TF1 *FitGausQuad( TH1D *htest, vector<double> value ){
   fitfunc->FixParameter(3, value[0]);
   fitfunc->FixParameter(4, value[1]);
   fitfunc->FixParameter(5, value[2]);
-  fitfunc->SetNpx(1000);
+  fitfunc->SetNpx(2000);
   fitfunc->SetLineColor(kRed);
   
   htest->Fit(fitfunc,"q0S","",xlow, xhigh);
-  cout << "xlow = " << xlow << ", xhigh = " << xhigh << endl;
-  cout << "binlow = " << binlow << ", binhigh = " << binhigh << endl;
+  //cout << "xlow = " << xlow << ", xhigh = " << xhigh << endl;
+  //cout << "binlow = " << binlow << ", binhigh = " << binhigh << endl;
   return fitfunc;
 }
 
@@ -113,10 +113,7 @@ TF1* QuadOnly( vector<double> value ){
   return fitquad;
 }
 
-//map<int, double> mapbyrun(const vector<pair<int, double>>& entries) {
-//  map<int, double> totals;
-//}
-
+// Read run number from file name
 int Readfilename( const string& filename){
   string pattern = "gep5_fullreplay_";
   size_t start = filename.find(pattern);
@@ -128,9 +125,16 @@ int Readfilename( const string& filename){
   return stoi(runStr);
 }
 
+// Structure for storing our info that is specific to each run
+struct RunData{
+  int events;
+  double livetime;
+  double charge;
+};
+
 
 // **** ========== Main functions ========== **** 
-void GetElasticYield( const char *configfilename, const char *chargefile="runCharge.txt", const char *outfilename="ElasticPeak.root"){
+void GetElasticYield( const char *configfilename, const char *chargefile="runCharge.txt", const char *outfilename="ElasticYield.root"){
 
   gErrorIgnoreLevel = kError; // Ignores all ROOT warnings
 
@@ -179,6 +183,7 @@ void GetElasticYield( const char *configfilename, const char *chargefile="runCha
   double eprime_eth[MAXHEEP], ecalo[MAXHEEP];
   double L1A[MAXHEEP], TS10[MAXHEEP];
   double runnum[1];
+  double dpp[MAXHEEP];
 
   // Why are the branches disabled here? To make it run FASTER by only activating the ones you need!
   // the * applies it to all branches, the 0 disables those branches. to enable would need to make 1
@@ -200,6 +205,7 @@ void GetElasticYield( const char *configfilename, const char *chargefile="runCha
   C->SetBranchAddress("heep.dyECAL", dyECAL);
   C->SetBranchAddress("heep.eprime_eth", eprime_eth);
   C->SetBranchAddress("heep.ecalo", ecalo);
+  C->SetBranchAddress("heep.dpp", dpp);
   C->SetBranchAddress("g.runnum", runnum);
   R->SetBranchAddress("sbsgep.L1A.scalerRate", L1A);
   R->SetBranchAddress("sbsgep.TS10_EcalScint.scalerRate", TS10);
@@ -215,7 +221,9 @@ void GetElasticYield( const char *configfilename, const char *chargefile="runCha
 
   TH2D *hdxECAL_v_dyECAL = new TH2D("hdxECAL_v_dyECAL", "heep.dxECAL vs heep.dyECAL ; heep.dyECAL (m); heep.dxECAL (m)", bins/2, -range/2, range/2, bins/2, -range/2, range/2);
 
-  TH1D *hEdivP = new TH1D("hEdivP", "E/P after global cut; E/P;", 100, 0.0, 1.3);
+  TH1D *hEdivP = new TH1D("hEdivP", "E/P after global cut; E/P;", bins, 0.0, 1.3);
+  TH1D *hdpp = new TH1D("hdpp", "dpp after global cut; dpp;", bins, -range/2, range/2);
+  TH1D *hYield = new TH1D("hYield", "Normalized Elastic Yield; N_elastic;", bins, 10000, 20000);
 
   long nevent=0;
   TTreeFormula *GlobalCut = new TTreeFormula( "GlobalCut", globalcut.GetTitle(), C );
@@ -251,27 +259,32 @@ void GetElasticYield( const char *configfilename, const char *chargefile="runCha
       hdyECAL->Fill( dyECAL[0]);
       hdxECAL_v_dyECAL->Fill( dyECAL[0], dxECAL[0]);
       hEdivP->Fill(ecalo[0]/eprime_eth[0]);
+      hdpp->Fill( dpp[0]);
     }
     
   }
-  cout << "Print my map:" << endl;
-  for (const auto& element : runyield){
-    cout << element.first << " : " << element.second << "\n";
-  }
-  //cout << runyield << endl;
+  
+  // cout << "Print my map:" << endl;
+  //for (const auto& element : runyield){
+  //  cout << element.first << " : " << element.second << "\n";
+  //}
 
   // Let's do some charge corrections
-  ifstream fcharge(chargefile);
+  ifstream fcharge(chargefile);  // read a text file which contains all the total charge values of each run
   int runrow;
   double chargerow;
+  map<int, double> chargemap;
   while(fcharge >> runrow >> chargerow){
-    cout << "Read charge: " << runrow << ", " << chargerow << endl;
+    //cout << "Read charge: " << runrow << ", " << chargerow << endl;
+    if( chargemap.find(runrow) == chargemap.end() ){
+        chargemap.insert({runrow, chargerow});
+    }
   }
   fcharge.close();
 
   // Let's do some livetime corrections
   long nts=0;
-  double L1Asum=0, liveT=0;
+  double liveT=0;
   int treenumR=0, currenttreenumR=0;
   map<int, double> runlivet;
   map<int, int> runlivetN;
@@ -287,8 +300,7 @@ void GetElasticYield( const char *configfilename, const char *chargefile="runCha
 
     currentRunNumber = Readfilename(fname);
 
-    L1Asum += L1A[0];
-    liveT += L1A[0] / (TS10[0]+4);
+    liveT = L1A[0] / (TS10[0]+4);
 
     if( runlivet.find(currentRunNumber) == runlivet.end() ){
         runlivet.insert({currentRunNumber, liveT});
@@ -298,13 +310,31 @@ void GetElasticYield( const char *configfilename, const char *chargefile="runCha
 	runlivet[currentRunNumber] += liveT;
 	runlivetN[currentRunNumber]++;
       }
-    //cout << "filename : " << currentRunNumber << endl;
     
   }
-  double L1Aavg = L1Asum/nts;
-  double liveTavg = liveT/nts;
-  cout << "L1A average = " << L1Aavg << endl;
-  cout << "Live time average = " << liveTavg << endl;
+
+  // Our maps of data are:
+  //   runyield (events in each run passing cuts)
+  //   runcharge (charge of each run)
+  //   runlivet (sum of live times in each run)
+  //   runlivetN (number of enteries to get average live time from runlivet map)
+  map<int, RunData> runmap;  // now merge all this info together and contain it in the RunData struct
+  for( const auto& [key, valA] : runyield) {
+    runmap[key] = { valA, runlivet.at(key) / runlivetN.at(key), chargemap.at(key) };
+  }
+
+  double normyield = 0;
+  for( const auto& [run, data] : runmap) {
+    cout << "Run " << run
+	 << ": yield = " << data.events
+	 << ", livetime = " << data.livetime
+	 << ", charge = " << data.charge << endl;
+    normyield += data.events / (data.charge * data.livetime);
+    hYield->Fill(data.events / (data.charge * data.livetime));
+  }
+
+  cout << "Average Elastic Yield in x with charge and live time normalization = " << normyield/runmap.size() << " Events/Coulomb" << "\n" << endl;
+  
   
   TString outfilepdf = outfilename; // Make a pdf file to save these histograms to
   outfilepdf.ReplaceAll(".root",".pdf");
@@ -347,11 +377,40 @@ void GetElasticYield( const char *configfilename, const char *chargefile="runCha
   //c1->Update();
   c1->Print(outfilepdf + "(");  //Open the pdf and make the first page
 
-  double ElasticYieldX = (fitSigX->Integral(-1,1))/(range/bins);
-  double ElasticYieldY = (fitSigY->Integral(-1,1))/(range/bins);
+  //double ElasticYieldX = (fitSigX->Integral(-1,1))/(range/bins);
+  //double ElasticYieldY = (fitSigY->Integral(-1,1))/(range/bins);
 
-  cout << "Elastic yeild X = " << ElasticYieldX << endl;
-  cout << "Elastic yeild Y = " << ElasticYieldY << endl;
+  //cout << "Elastic yeild X = " << ElasticYieldX << endl;
+  //cout << "Elastic yeild Y = " << ElasticYieldY << endl;
+
+  // Let's try fitting our dpp distribution
+  vector<double> bparP;
+  vector<double> sparP;
+
+  TF1 *fitBkgrSideP = FitBkgrSide(hdpp);  // Fit the background at the sides
+  bparP.push_back(fitBkgrSideP->GetParameter(0));
+  bparP.push_back(fitBkgrSideP->GetParameter(1));
+  bparP.push_back(fitBkgrSideP->GetParameter(2));
+  TF1 *fitAllP = FitGausQuad(hdpp, bparP); // Fit signal over the background
+  sparP.push_back(fitAllP->GetParameter(0));
+  sparP.push_back(fitAllP->GetParameter(1));
+  sparP.push_back(fitAllP->GetParameter(2));
+  TF1 *fitSigP = GausOnly(sparP); // Extract only signal and background
+  TF1 *fitBkgrP = QuadOnly(bparP);
+
+  double fsig = fitSigP->Integral(-range/2,range/2) / fitAllP->Integral(-range/2,range/2);
+
+  cout << "Signal fraction = " << fsig << endl;
+
+  cout << "Number of sig = " << (fitSigP->Integral(-range/2,range/2))/(range/bins) << endl;
+  cout << "Number of bkgr = " << (fitBkgrP->Integral(-range/2,range/2))/(range/bins) << endl;
+  cout << "Number of events = " << (fitAllP->Integral(-range/2,range/2))/(range/bins) << endl;
+
+  TCanvas *c2 = new TCanvas("c2","",1600,1200);
+  c2->Divide(1,2);
+  c2->cd(1);    hdpp->Draw();    fitAllP->Draw("same");    fitBkgrP->Draw("same");    fitSigP->Draw("same");
+  c2->cd(2);    hYield->Draw();
+  c2->Print(outfilepdf + "");
 
 
   /**** Summary Canvas ****/
@@ -367,10 +426,10 @@ void GetElasticYield( const char *configfilename, const char *chargefile="runCha
   TText *t2 = pt->AddText(" Global cuts: ");
   t2->SetTextColor(kRed);
   AddWrappedText(pt, globalcut.GetTitle());
-  TText *t3 = pt->AddText(Form(" Fit Integrated Elastic Yield X: %.0f", ElasticYieldX));
+  TText *t3 = pt->AddText(Form(" Average Charge Normalized Elastic Yield: %.0f", normyield * fsig /runmap.size()));
   t3->SetTextColor(kRed);
-  TText *t4 = pt->AddText(Form(" Fit Integrated Elastic Yield Y: %.0f", ElasticYieldY));
-  t4->SetTextColor(kRed);
+  //TText *t4 = pt->AddText(Form(" Fit Integrated Elastic Yield Y: %.0f", ElasticYieldY));
+  //t4->SetTextColor(kRed);
   pt->Draw();
   cSummary->Print(outfilepdf + ")"); // Close out the pdf
   
