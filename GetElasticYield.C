@@ -48,7 +48,7 @@ void AddWrappedText(TPaveText* pt, const TString& text, int maxCharsPerLine = 60
 
 // Exclude specified range in fit
 Double_t RejectFunc(Double_t *x, Double_t *par){
-  if (x[0] > -0.08 && x[0] < 0.09){
+  if (x[0] > -0.04 && x[0] < 0.06){
     TF1::RejectPoint();
     return 0;
   }
@@ -57,7 +57,12 @@ Double_t RejectFunc(Double_t *x, Double_t *par){
 
 // Fit our background to the sides away from central peak
 TF1 *FitBkgrSide( TH1D *htest){
-  TF1 *Bkgr = new TF1("Bkgr", RejectFunc, -5, 5, 3);
+  int firstbin = htest->FindFirstBinAbove(0);
+  int lastbin = htest->FindLastBinAbove(0);
+  double xlow = htest->GetBinLowEdge(firstbin);
+  double xhigh = htest->GetBinLowEdge(lastbin);
+  
+  TF1 *Bkgr = new TF1("Bkgr", RejectFunc, xlow, xhigh, 3);
   Bkgr->SetParameters(0, 0, -0.1);
   Bkgr->SetNpx(1000);
   Bkgr->SetLineColor(kBlue);
@@ -67,18 +72,19 @@ TF1 *FitBkgrSide( TH1D *htest){
 
 // Fit our signal over the background
 TF1 *FitGausQuad( TH1D *htest, vector<double> value ){
-  int binmax = htest->GetNbinsX();
-  int binlow = 1, binhigh = binmax;
+  int firstbin = htest->FindFirstBinAbove(0);
+  int lastbin = htest->FindLastBinAbove(0);
 
+  //int binmax = htest->GetNbinsX();
+  //int binlow = 1, binhigh = binmax;
   //double max = htest->GetBinContent(binmax);
-
   //while( htest->GetBinContent(binlow) >= thresh*max && binlow > 1 ){binlow--;}
   //while( htest->GetBinContent(binhigh) >= thresh*max && binhigh < htest->GetNbinsX() ){ binhigh++; }
 
-  double xlow = htest->GetBinLowEdge(binlow);
-  double xhigh = htest->GetBinLowEdge(binhigh);
+  double xlow = htest->GetBinLowEdge(firstbin);
+  double xhigh = htest->GetBinLowEdge(lastbin);
 
-  TF1 *fitfunc = new TF1("fitfunc", "[0]*exp(-0.5*((x-[1])/[2])^2) + [3] + [4]*x + [5]*x^2", -5, 5);
+  TF1 *fitfunc = new TF1("fitfunc", "[0]*exp(-0.5*((x-[1])/[2])^2) + [3] + [4]*x + [5]*x^2", xlow, xhigh);
   fitfunc->SetParameters(10, 0, 0.1, value[0], value[1], value[2]);
   fitfunc->SetParNames("Amp", "Mean", "Sigma", "Offset", "Slope", "Quad");
   fitfunc->FixParameter(3, value[0]);
@@ -94,8 +100,13 @@ TF1 *FitGausQuad( TH1D *htest, vector<double> value ){
 }
 
 // Seperating out signal
-TF1* GausOnly( vector<double> value ){
-  TF1 *fitgaus = new TF1("fitgaus", "[0]*exp(-0.5*((x-[1])/[2])^2)", -1, 1);
+TF1* GausOnly( vector<double> value , TH1D *htest){
+  int firstbin = htest->FindFirstBinAbove(0);
+  int lastbin = htest->FindLastBinAbove(0);
+  double xlow = htest->GetBinLowEdge(firstbin);
+  double xhigh = htest->GetBinLowEdge(lastbin);
+  
+  TF1 *fitgaus = new TF1("fitgaus", "[0]*exp(-0.5*((x-[1])/[2])^2)", xlow, xhigh);
   fitgaus->SetParameters(value[0], value[1], value[2]);
   fitgaus->SetNpx(1000);
   fitgaus->SetLineColor(kBlue);
@@ -104,8 +115,13 @@ TF1* GausOnly( vector<double> value ){
 }
 
 // Sperating out background
-TF1* QuadOnly( vector<double> value ){
-  TF1 *fitquad = new TF1("fitquad", "[0]+[1]*x+[2]*x^2", -1, 1);
+TF1* QuadOnly( vector<double> value, TH1D *htest ){
+  int firstbin = htest->FindFirstBinAbove(0);
+  int lastbin = htest->FindLastBinAbove(0);
+  double xlow = htest->GetBinLowEdge(firstbin);
+  double xhigh = htest->GetBinLowEdge(lastbin);
+  
+  TF1 *fitquad = new TF1("fitquad", "[0]+[1]*x+[2]*x^2", xlow, xhigh);
   fitquad->SetParameters(value[0], value[1], value[2]);
   fitquad->SetNpx(1000);
   fitquad->SetLineColor(kMagenta);
@@ -215,7 +231,7 @@ void GetElasticYield( const char *configfilename, const char *chargefile="runCha
 
   // Set up the histograms we want to look at:
   int bins = 200;   // useful for normalizing later on
-  double range = 0.36;
+  double range = 0.25;
   TH1D *hdxECAL = new TH1D("hdxECAL", "heep.dxECAL after global cut; heep.dxECAL (m);", bins, -range/2, range/2);
   TH1D *hdyECAL = new TH1D("hdyECAL", "heep.dyECAL after global cut; heep.dyECAL (m);", bins, -range/2, range/2);
 
@@ -223,7 +239,7 @@ void GetElasticYield( const char *configfilename, const char *chargefile="runCha
 
   TH1D *hEdivP = new TH1D("hEdivP", "E/P after global cut; E/P;", bins, 0.0, 1.3);
   TH1D *hdpp = new TH1D("hdpp", "dpp after global cut; dpp;", bins, -range/2, range/2);
-  TH1D *hYield = new TH1D("hYield", "Normalized Elastic Yield; N_elastic;", bins, 10000, 20000);
+  TH1D *hYield = new TH1D("hYield", "Normalized Elastic Yield; N_elastic;", bins, 5000, 35000);
 
   long nevent=0;
   TTreeFormula *GlobalCut = new TTreeFormula( "GlobalCut", globalcut.GetTitle(), C );
@@ -320,7 +336,9 @@ void GetElasticYield( const char *configfilename, const char *chargefile="runCha
   //   runlivetN (number of enteries to get average live time from runlivet map)
   map<int, RunData> runmap;  // now merge all this info together and contain it in the RunData struct
   for( const auto& [key, valA] : runyield) {
-    runmap[key] = { valA, runlivet.at(key) / runlivetN.at(key), chargemap.at(key) };
+    if (runlivet.count(key) && chargemap.count(key)){
+      runmap[key] = { valA, runlivet.at(key) / runlivetN.at(key), chargemap.at(key) };
+    }
   }
 
   double normyield = 0;
@@ -351,8 +369,8 @@ void GetElasticYield( const char *configfilename, const char *chargefile="runCha
   sparX.push_back(fitAllX->GetParameter(0));
   sparX.push_back(fitAllX->GetParameter(1));
   sparX.push_back(fitAllX->GetParameter(2));
-  TF1 *fitSigX = GausOnly(sparX); // Extract only signal and backgroun
-  TF1 *fitBkgrX = QuadOnly(bparX);
+  TF1 *fitSigX = GausOnly(sparX, hdxECAL); // Extract only signal and backgroun
+  TF1 *fitBkgrX = QuadOnly(bparX, hdxECAL);
 
   
   TF1 *fitBkgrSideY = FitBkgrSide(hdyECAL);
@@ -363,8 +381,8 @@ void GetElasticYield( const char *configfilename, const char *chargefile="runCha
   sparY.push_back(fitAllY->GetParameter(0));
   sparY.push_back(fitAllY->GetParameter(1));
   sparY.push_back(fitAllY->GetParameter(2));
-  TF1 *fitSigY = GausOnly(sparY);
-  TF1 *fitBkgrY = QuadOnly(bparY);
+  TF1 *fitSigY = GausOnly(sparY, hdyECAL);
+  TF1 *fitBkgrY = QuadOnly(bparY, hdyECAL);
   
   
   // Make some plots for us to look at
@@ -395,10 +413,13 @@ void GetElasticYield( const char *configfilename, const char *chargefile="runCha
   sparP.push_back(fitAllP->GetParameter(0));
   sparP.push_back(fitAllP->GetParameter(1));
   sparP.push_back(fitAllP->GetParameter(2));
-  TF1 *fitSigP = GausOnly(sparP); // Extract only signal and background
-  TF1 *fitBkgrP = QuadOnly(bparP);
+  TF1 *fitSigP = GausOnly(sparP, hdpp); // Extract only signal and background
+  TF1 *fitBkgrP = QuadOnly(bparP, hdpp);
 
-  double fsig = fitSigP->Integral(-range/2,range/2) / fitAllP->Integral(-range/2,range/2);
+  double xmin = fitAllP->GetXmin();
+  double xmax = fitAllP->GetXmax();
+  
+  double fsig = fitSigP->Integral(xmin, xmax) / fitAllP->Integral(xmin, xmax);
 
   cout << "Signal fraction = " << fsig << endl;
 
