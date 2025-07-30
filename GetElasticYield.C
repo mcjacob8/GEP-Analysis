@@ -150,7 +150,7 @@ struct RunData{
 
 
 // **** ========== Main functions ========== **** 
-void GetElasticYield( const char *configfilename, const char *chargefile="runCharge.txt", const char *outfilename="ElasticYield.root"){
+void GetElasticYield( const char *configfilename, const char *chargefile="runCharge.txt", const char *outfilename="output/ElasticYield.root"){
 
   gErrorIgnoreLevel = kError; // Ignores all ROOT warnings
 
@@ -239,7 +239,7 @@ void GetElasticYield( const char *configfilename, const char *chargefile="runCha
 
   TH1D *hEdivP = new TH1D("hEdivP", "E/P after global cut; E/P;", bins, 0.0, 1.3);
   TH1D *hdpp = new TH1D("hdpp", "dpp after global cut; dpp;", bins, -range/2, range/2);
-  TH1D *hYield = new TH1D("hYield", "Normalized Elastic Yield; N_elastic;", bins, 5000, 35000);
+  TH1D *hYield = new TH1D("hYield", "Normalized Elastic Yield; N_elastic;", bins, 20000, 40000);
 
   long nevent=0;
   TTreeFormula *GlobalCut = new TTreeFormula( "GlobalCut", globalcut.GetTitle(), C );
@@ -342,16 +342,20 @@ void GetElasticYield( const char *configfilename, const char *chargefile="runCha
   }
 
   double normyield = 0;
+  double totalcharge = 0;
   for( const auto& [run, data] : runmap) {
     cout << "Run " << run
 	 << ": yield = " << data.events
 	 << ", livetime = " << data.livetime
-	 << ", charge = " << data.charge << endl;
-    normyield += data.events / (data.charge * data.livetime);
-    hYield->Fill(data.events / (data.charge * data.livetime));
+	 << ", charge = " << data.charge
+	 << ", normalized yield = " << data.events / data.livetime / data.charge << endl;
+    //normyield += data.events / (data.charge * data.livetime);
+    normyield += data.events / data.livetime;
+    totalcharge += data.charge;
+    hYield->Fill( data.events / data.livetime / data.charge);
   }
 
-  cout << "Average Elastic Yield in x with charge and live time normalization = " << normyield/runmap.size() << " Events/Coulomb" << "\n" << endl;
+  cout << "Elastic Yield with charge and live time normalization = " << normyield/totalcharge << " Events/Coulomb" << "\n" << endl;
   
   
   TString outfilepdf = outfilename; // Make a pdf file to save these histograms to
@@ -447,8 +451,9 @@ void GetElasticYield( const char *configfilename, const char *chargefile="runCha
   TText *t2 = pt->AddText(" Global cuts: ");
   t2->SetTextColor(kRed);
   AddWrappedText(pt, globalcut.GetTitle());
-  TText *t3 = pt->AddText(Form(" Average Charge Normalized Elastic Yield: %.0f", normyield * fsig /runmap.size()));
+  TText *t3 = pt->AddText(Form(" Average Charge Normalized Elastic Yield: %.0f", normyield * fsig / totalcharge));
   t3->SetTextColor(kRed);
+  pt->AddText(Form(" Signal fraction: %.5f ",fsig));
   //TText *t4 = pt->AddText(Form(" Fit Integrated Elastic Yield Y: %.0f", ElasticYieldY));
   //t4->SetTextColor(kRed);
   pt->Draw();
