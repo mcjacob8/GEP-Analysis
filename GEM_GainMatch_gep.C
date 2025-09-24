@@ -25,6 +25,8 @@
 #include "TStyle.h"
 #include "TCut.h"
 #include "TTreeFormula.h"
+#include "TGraphErrors.h"
+
 // bunch of header files that are needed throughout the script
 
 //What is the purpose of each one of these vector variables?
@@ -1338,8 +1340,8 @@ void GEM_GainMatch_gep( const char *configfilename, const char *outfname="output
 	//if( 0.5*(hit_ADCU[ihit]/hit_Ugain[ihit]+hit_ADCV[ihit]/hit_Vgain[ihit]) >= ADCcut && tridx == itrack ){
 	//if( tridx == itrack )
 	//if( 0.5*(hit_ADCU[ihit]/hit_Ugain[ihit]+hit_ADCV[ihit]/hit_Vgain[ihit]) >= ADCcut && hit_ADCU[ihit] >= ADCcut && hit_ADCV[ihit] >= ADCcut && tridx == itrack && hit_nstripu[ihit]>1 && hit_nstripv[ihit]>1 && hit_ccor_clust[ihit] >= ccor_cut && fabs(hit_deltat[ihit]) <= deltat_cut ){
-	if( hit_ADCU[ihit] >= ADCcut && hit_ADCV[ihit] >= ADCcut && tridx == itrack && hit_nstripu[ihit]>1 && hit_nstripv[ihit]>1 && hit_ccor_clust[ihit] >= ccor_cut && fabs(hit_deltat[ihit]) <= deltat_cut ){
-	  //if( tridx == itrack ){
+	//if( hit_ADCU[ihit] >= ADCcut && hit_ADCV[ihit] >= ADCcut && tridx == itrack && hit_nstripu[ihit]>1 && hit_nstripv[ihit]>1 && hit_ccor_clust[ihit] >= ccor_cut && fabs(hit_deltat[ihit]) <= deltat_cut ){
+	  if( tridx == itrack ){
 	  // cout << ", ADCavg[ihit] = " << hit_ADCavg[ihit]
 	  // 	 << ", ADCasym[ihit] = " << hit_ADCasym[ihit]
 	  // 	 << ", (nstripu,nstripv) = (" << hit_nstripu[ihit] << ", " << hit_nstripv[ihit] << ")"
