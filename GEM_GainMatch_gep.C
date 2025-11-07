@@ -111,7 +111,7 @@ void chi2_FCN( int &npar, double *gin, double &f, double *par, int flag ){
 
 
 //void GEM_GainMatch(const char *infilename, int nmodules, const char *fname_stripconfig, const char *detname="bb.gem", double chi2cut=10.0, double ADCcut = 1000.0, double target_ADC=4500.0){
-void GEM_GainMatch_gep( const char *configfilename, const char *outfname="output/GEM_gainmatch_temp.root" ){
+void GEM_GainMatch_gep( const char *configfilename, const char *outfname="output/GEM_gainmatch_pass3.root" ){
 
   ifstream configfile(configfilename);
 
@@ -406,6 +406,8 @@ void GEM_GainMatch_gep( const char *configfilename, const char *outfname="output
   C->SetBranchStatus("heep.dxECAL",1);
   C->SetBranchStatus("heep.dpp",1);
   C->SetBranchStatus("heep.dt_ADC",1);
+  C->SetBranchStatus("*.track.ngoodhits",1);
+  C->SetBranchStatus("g.runnum",1);
   C->SetBranchStatus("g.runnum",1);
 
 
