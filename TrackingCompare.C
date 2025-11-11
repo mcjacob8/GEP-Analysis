@@ -189,117 +189,70 @@ void TrackingCompare(const char *root1 = "output/GEPtrackingcuts.root", const ch
             c->cd((i % plotsPerPage) + 1);
 
             // Only attempt fit if both histograms have enough events
-const double minEntries = 300.0;
+            const double minEntries = 300.0;
+            if (h1->GetEntries() > minEntries && h2->GetEntries() > minEntries) {
+                TF1 *fit1 = nullptr;
+                TF1 *fit2 = nullptr;
 
-if (h1->GetEntries() > minEntries && h2->GetEntries() > minEntries) {
+                // Determine if fitting gaussian or landau based on histogram index
+                if (i == 0 || i == 1 || i == 6 || i == 7) {
+                    h1->Fit("landau","qS","",0,1000.);
+                    h2->Fit("landau","qS","",0,1000.);
+                    fit1 = h1->GetFunction("landau");
+                    fit2 = h2->GetFunction("landau");
+                } else if (i == 2 || i == 3 || i == 8 || i == 9) {
+                    h1->Fit("landau","qS","",0,3000.);
+                    h2->Fit("landau","qS","",0,3000.);
+                    fit1 = h1->GetFunction("landau");
+                    fit2 = h2->GetFunction("landau");
+                } else if (i == 4 || i == 5) {
+                    h1->Fit("landau","qS","",0,7500.);
+                    h2->Fit("landau","qS","",0,7500.);
+                    fit1 = h1->GetFunction("landau");
+                    fit2 = h2->GetFunction("landau");
+                } else{
+                    FitGaus_FWHM(h1, 0.3);
+                    FitGaus_FWHM(h2, 0.3);
+                    fit1 = h1->GetFunction("gaus");
+                    fit2 = h2->GetFunction("gaus");
+                }
 
-    TF1 *fit1 = nullptr;
-    TF1 *fit2 = nullptr;
+                // Customize fits
+                if (fit1 && fit2) {
+                    fit1->SetLineColor(kBlack + 2);
+                    fit1->SetLineStyle(2);
+                    fit1->SetLineWidth(2);
+                    fit2->SetLineColor(kBlack);
+                    fit2->SetLineStyle(2);
+                    fit2->SetLineWidth(2);
+                }
 
-    // Determine if fitting gaussian or landau based on histogram index
-    if (i == 0 || i == 1 || i == 6 || i == 7) {
-        h1->Fit("landau","qS","",0,1000.);
-        h2->Fit("landau","qS","",0,1000.);
-        fit1 = h1->GetFunction("landau");
-        fit2 = h2->GetFunction("landau");
-    } else if (i == 2 || i == 3 || i == 8 || i == 9) {
-        h1->Fit("landau","qS","",0,3000.);
-        h2->Fit("landau","qS","",0,3000.);
-        fit1 = h1->GetFunction("landau");
-        fit2 = h2->GetFunction("landau");
-    } else if (i == 4 || i == 5) {
-        h1->Fit("landau","qS","",0,7500.);
-        h2->Fit("landau","qS","",0,7500.);
-        fit1 = h1->GetFunction("landau");
-        fit2 = h2->GetFunction("landau");
-    } else{
-        FitGaus_FWHM(h1, 0.3);
-        FitGaus_FWHM(h2, 0.3);
-        fit1 = h1->GetFunction("gaus");
-        fit2 = h2->GetFunction("gaus");
-    }
-
-    // Customize fits
-    if (fit1 && fit2) {
-        fit1->SetLineColor(kBlack + 2);
-        fit1->SetLineStyle(2);
-        fit1->SetLineWidth(2);
-        fit2->SetLineColor(kBlack);
-        fit2->SetLineStyle(2);
-        fit2->SetLineWidth(2);
-    }
-
-    h1->Draw("HIST");
-    h2->Draw("HIST SAME");
+                h1->Draw("HIST");
+                h2->Draw("HIST SAME");
     
-    if (fit1) fit1->Draw("SAME");
-    if (fit2) fit2->Draw("SAME");
+                if (fit1) fit1->Draw("SAME");
+                if (fit2) fit2->Draw("SAME");
 
-    TLegend *leg = new TLegend(0.75, 0.550, 0.98, 0.75);
-    leg->AddEntry(h1, "LH2", "l");
-    leg->AddEntry(h2, "Optics", "l");
-    if (fit1) leg->AddEntry(fit1, "LH2 fit", "l");
-    if (fit2) leg->AddEntry(fit2, "Optics fit", "l");
-    leg->SetTextSize(0.04);
-    leg->Draw();
+                TLegend *leg = new TLegend(0.75, 0.550, 0.98, 0.75);
+                leg->AddEntry(h1, "LH2", "l");
+                leg->AddEntry(h2, "Optics", "l");
+                if (fit1) leg->AddEntry(fit1, "LH2 fit", "l");
+                if (fit2) leg->AddEntry(fit2, "Optics fit", "l");
+                leg->SetTextSize(0.04);
+                leg->Draw();
 
-} else {
-    // If not enough entries, just draw histograms without fits
-    h1->Draw("HIST");
-    h2->Draw("HIST SAME");
+            } else {
+                // If not enough entries, just draw histograms without fits
+                h1->Draw("HIST");
+                h2->Draw("HIST SAME");
 
-    TLegend *leg = new TLegend(0.75, 0.550, 0.98, 0.75);
-    leg->AddEntry(h1, "LH2", "l");
-    leg->AddEntry(h2, "Optics", "l");
-    leg->SetTextSize(0.04);
-    leg->Draw();
-}
-/*
-            // Determine if fitting gaussian or landau based on histogram name
-            TF1 *fit1 = nullptr;
-            TF1 *fit2 = nullptr;
-            if (i == 0 || i == 1 || i == 6 || i == 7) {
-                h1->Fit("landau","qS","",0,1000.);
-                h2->Fit("landau","qS","",0,1000.);
-                fit1 = h1->GetFunction("landau");
-                fit2 = h2->GetFunction("landau");
-            } else if (i == 2 || i == 3 || i == 8 || i == 9) {
-                h1->Fit("landau","qS","",0,3000.);
-                h2->Fit("landau","qS","",0,3000.);
-                fit1 = h1->GetFunction("landau");
-                fit2 = h2->GetFunction("landau");
-            } else if (i == 4 || i == 5) {
-                h1->Fit("landau","qS","",0,7500.);
-                h2->Fit("landau","qS","",0,7500.);
-                fit1 = h1->GetFunction("landau");
-                fit2 = h2->GetFunction("landau");
-            } else{
-                FitGaus_FWHM( h1,0.3 );
-                FitGaus_FWHM( h2,0.3 );
-                fit1 = h1->GetFunction("gaus");
-                fit2 = h2->GetFunction("gaus");
+                TLegend *leg = new TLegend(0.75, 0.550, 0.98, 0.75);
+                leg->AddEntry(h1, "LH2", "l");
+                leg->AddEntry(h2, "Optics", "l");
+                leg->SetTextSize(0.04);
+                leg->Draw();
             }
 
-            fit1->SetLineColor(kBlack + 2);
-            fit1->SetLineStyle(2);
-            fit1->SetLineWidth(2);
-            fit2->SetLineColor(kBlack);
-            fit2->SetLineStyle(2);
-            fit2->SetLineWidth(2);
-
-            h1->Draw("HIST");
-            h2->Draw("HIST SAME");
-            fit1->Draw("SAME");
-            fit2->Draw("SAME");
-
-            TLegend *leg = new TLegend(0.75, 0.550, .98, 0.75);
-            leg->AddEntry(h1, "LH2", "l");
-            leg->AddEntry(h2, "Optics", "l");
-            leg->AddEntry(fit1, "LH2 fit", "l");
-            leg->AddEntry(fit2, "Optics", "l");
-            leg->SetTextSize(0.04);
-            leg->Draw();
-*/
             if ((i + 1) % plotsPerPage == 0 || i == nHist - 1) {
                 c->Print(Form("%s", outpdf)); // save the full page
             }
