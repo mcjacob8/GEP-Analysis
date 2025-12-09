@@ -23,6 +23,16 @@
 #include "TClonesArray.h"
 #include "TCanvas.h"
 #include "TPaveText.h"
+#include "TLegend.h"
+#include "TMath.h"
+#include "TStopwatch.h"
+#include "TStyle.h"
+#include "TLine.h"
+#include "TPaveStats.h"
+
+// Constants
+double Mp = 0.938272; // Proton mass in GeV/c^2
+double kp = 1.79; // Proton anomalous magnetic moment
 
 // **** ========== Useful functions ========== ****  
 // returns today's date
@@ -246,10 +256,11 @@ void GetAsymmetry( const char *configfilename="configElastic.cfg", const char *c
   double dxECAL[MAXHEEP], dyECAL[MAXHEEP];
   double eprime_eth[MAXHEEP], ecalo[MAXHEEP];
   double runnum[1];
-  double dpp[MAXHEEP];
+  double dpp[MAXHEEP], pp[MAXHEEP];
   double sclose[MAXHEEP], zclose[MAXHEEP];
   double ttheta[MAXHEEP], tphi[MAXHEEP];
   double true_hel[1];
+  double th_tar[MAXHEEP], th_fp[MAXHEEP];
 
   // Why are the branches disabled here? To make it run FASTER by only activating the ones you need!
   // the * applies it to all branches, the 0 disables those branches. to enable would need to make 1
@@ -273,13 +284,15 @@ void GetAsymmetry( const char *configfilename="configElastic.cfg", const char *c
   C->SetBranchAddress("heep.eprime_eth", eprime_eth);
   C->SetBranchAddress("heep.ecalo", ecalo);
   C->SetBranchAddress("heep.dpp", dpp);
+  C->SetBranchAddress("heep.pp", pp);
   C->SetBranchAddress("g.runnum", runnum);
   C->SetBranchAddress("sbs.gemFPP.track.sclose", sclose);
   C->SetBranchAddress("sbs.gemFPP.track.zclose", zclose);
   C->SetBranchAddress("sbs.gemFPP.track.theta", ttheta);
   C->SetBranchAddress("sbs.gemFPP.track.phi", tphi);
   C->SetBranchAddress("scalhel.true_hel", true_hel);
-  
+  C->SetBranchAddress("sbs.tr.th", th_fp);
+  C->SetBranchAddress("sbs.tr.tg_th", th_tar);
 
   TFile *fout = new TFile(outfilename, "RECREATE");
 
@@ -303,6 +316,14 @@ void GetAsymmetry( const char *configfilename="configElastic.cfg", const char *c
   TH1D *htphipos = new TH1D("htphipos", "Azimuthal Scattering Angle; #phi (rad); Events", 18, -M_PI, M_PI);
   TH1D *htphineg = new TH1D("htphineg", "Azimuthal Scattering Angle; #phi (rad); Events", 18, -M_PI, M_PI);
   TH2D *hzvtheta = new TH2D("hzvtheta", "z vs #theta ;#theta (deg);z_{close} (m)", bins, 0.0, 30.0, bins, 0.0, 3.0);
+
+  TH1D *hth_fp = new TH1D("hth_fp", "Outgoing Theta; #theta_{fp} (rad); Events", bins, -0.2, 0.2);
+  TH1D *hth_tar = new TH1D("hth_tar", "Incoming Theta; #theta_{tar} (rad); Events", bins, -0.2, 0.2);
+  TH1D *htheta_bend = new TH1D("htheta_bend", "Difference between in and out theta; #theta_{tar} - #theta_{fp} (rad); Events", bins, 0., 0.15);
+
+  TH1D *hchi_th = new TH1D("hchi_th", "Chi Th Distribution; #chi_{th}; Events", bins, 0.0, 80.0);
+
+  TH1D *hgamma = new TH1D("hgamma", "Relativistic factor; #gamma; Events", bins, 0.0, 15.0);
 
   htphi->Sumw2();  htphipos->Sumw2();  htphineg->Sumw2();
   
@@ -355,6 +376,18 @@ void GetAsymmetry( const char *configfilename="configElastic.cfg", const char *c
       hzclose->Fill( zclose[0]);
       httheta->Fill( ttheta[0] * 180 / M_PI );
       hzvtheta->Fill( ttheta[0] * 180 / M_PI, zclose[0]);
+
+      hth_fp->Fill( th_fp[0]);
+      hth_tar->Fill( th_tar[0]);
+      double theta_bend = th_tar[0] - th_fp[0];
+      htheta_bend->Fill( theta_bend );
+
+      double gamma = sqrt(1 + pow( (pp[0] / Mp), 2) );
+      hgamma->Fill( gamma );
+
+      double chi_th = gamma*kp*theta_bend;
+      hchi_th->Fill( chi_th * 180 / M_PI );
+
       if (ttheta[0] * 180/ M_PI < 1) {
 	      hzclose1->Fill(zclose[0]);
       } else {
@@ -471,7 +504,16 @@ void GetAsymmetry( const char *configfilename="configElastic.cfg", const char *c
   c2->Modified();
   c2->Update();
   c2->Print(outfilepdf + "");
-  
+
+
+  TCanvas *c3 = new TCanvas("c3","",1600,1200);
+  c3->Divide(2,2);
+  c3->cd(1);    hth_tar->Draw();
+  c3->cd(2);    hchi_th->Draw(); //hth_fp->Draw();
+  c3->cd(3);    htheta_bend->Draw();
+  c3->cd(4);    hgamma->Draw();
+  c3->Update();
+  c3->Print(outfilepdf + "");
 
   /**** Summary Canvas ****/
   TCanvas *cSummary = new TCanvas("cSummary","Summary");
