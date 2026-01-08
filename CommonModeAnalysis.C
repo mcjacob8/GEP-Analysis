@@ -1,40 +1,41 @@
-// ------------------------------------------------------------------------ //
-// Script for GEM common mode studies: Intended to create plots of APV raw  //
-// frames with common mode values overlaid.                                 //
-//                                                                          //
-// ---------                                                                //
-//  Jacob McMurtry, rby2vw@virginia.edu CREATED 12-15-2025                  //
-// ---------                                                                //
-// ** Do not tamper with this sticker! Log any updates to the script above. //
-// ------------------------------------------------------------------------ //
+// ------------------------------------------------------------------------------------------------------- //
+// Script for GEM common mode studies: Intended to create plots of APV raw                                 //
+// frames with common mode values overlaid for diagnostic studies.                                         //
+//                                                                                                         //
+// Usage:                                                                                                  //
+//   root -l                                                                                               //
+//   .L plot_gem_apv_commonmode.C+                                                                         //
+//   plot_gem_apv_commonmode("replay.root", 0, 4, 4, 4);                                                   //
+//                                                                                                         //
+// Arguments:                                                                                              //
+//   filename : SBS-Replay ROOT output file                                                                //
+//   event    : event number                                                                               //
+//   module   : GEM module index (m0, m1, ...)                                                             //
+//   mpd      : MPD (fiber) number (module specific)                                                       //
+//   apv      : APV starting number                                                                        //
+//                                                                                                         //
+// For this script to be useful, full readout events with no zero suppression are needed (every 1/100      //
+// events, or data taken in pedestal mode, or events that fail ONLINE zero suppression).                   //
+// Data needs to be replayed in a specific manner for this to work properly:                               //
+//   replay_gep.C                                                       //                                 //
+//     In the argument of the main replay script, requiretrack = 0, nontrackingmode = 1, and dogems = 1.   //
+//   replay_gep.cdef                                                                                       //
+//     Make sure there are no cuts that require tracks (e.g. #GoodFrontTrack)                              //     
+//   db_sbs.gemF*.dat                                                                                      //
+//     Ensure that sbs.gemF*.zerosuppress = 0                                                              //
+//   replay_F*GEM_gep.odef                                                                                 //
+//     Uncomment block for strip variables of the desired module                                           //  
+//   SBSGEMModule.cxx/h                                                                                    //
+//     Ensure that common-mode variables are stored in the output ROOT tree                                //  
+//     (i.e. use proper version that includes sbs.gemF*.m*.strip.CMsamples etc.)                           //   
+//                                                                                                         //
+// ---------                                                                                               //
+//  Jacob McMurtry, rby2vw@virginia.edu CREATED 12-15-2025                                                 //
+// ---------                                                                                               //
+// ** Do not tamper with this sticker! Log any updates to the script above.                                //
+//  Jacob McMurtry, rby2vw@virginia.edu EDITED 1-8-2026 - CM overlay from new TTree variables              //
+// ------------------------------------------------------------------------------------------------------- //
 
-//============================================================
-// plot_gem_apv_commonmode.C
-//
-// Ready-to-run ROOT macro for SBS-Replay GEM common-mode studies
-// Adapted to *actual* GEp-V / sbs.gemFT branch names
-//
-// This macro plots, for ONE event, ONE GEM module, ONE MPD/APV:
-//   - ADC vs local strip number (0–127)
-//   - for each of the 6 APV time samples
-//   - with the common-mode level overlaid
-//
-// IMPORTANT:
-//  * SBS-Replay does NOT currently store CM-per-APV-per-sample explicitly
-//  * We therefore RECONSTRUCT the common mode as the MEDIAN of quiet strips
-//    (this matches fCommonModeFlag == 1 in SBSGEMModule)
-//
-// Usage:
-//   root -l
-//   .L plot_gem_apv_commonmode.C+
-//   plot_gem_apv_commonmode("replay.root", 0, 4, 2);
-//
-// Arguments:
-//   filename : SBS-Replay ROOT output file
-//   event    : event number
-//   module   : GEM module index (m0, m1, ...)
-//   mpd      : MPD/APV number
-//============================================================
 
 #include <TFile.h>
 #include <TTree.h>
