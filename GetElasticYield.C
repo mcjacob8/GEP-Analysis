@@ -150,7 +150,7 @@ struct RunData{
 
 
 // **** ========== Main functions ========== **** 
-void GetElasticYield( const char *configfilename, const char *chargefile="runCharge.txt", const char *outfilename="output/ElasticYield.root"){
+void GetElasticYield( const char *configfilename, const char *chargefile="runCharge.txt", const char *outfilename="output/ElasticYield_nocorr_0529.root"){
 
   gErrorIgnoreLevel = kError; // Ignores all ROOT warnings
 
@@ -182,10 +182,16 @@ void GetElasticYield( const char *configfilename, const char *chargefile="runCha
   }
 
   TCut globalcut = "";
-  
   while( currentline.ReadLine(infile) && !currentline.BeginsWith("endcut") ){
     if( !currentline.BeginsWith("#") ){
       globalcut += currentline.Data();
+    }
+  }
+
+  TCut selectioncut = "";
+  while( currentline.ReadLine(infile) && !currentline.BeginsWith("endselection") ){
+    if( !currentline.BeginsWith("#") ){
+      selectioncut += currentline.Data();
     }
   }
   
@@ -196,6 +202,7 @@ void GetElasticYield( const char *configfilename, const char *chargefile="runCha
 
   // List of variables to cut on
   double dxECAL[MAXHEEP], dyECAL[MAXHEEP];
+  double ecalx[MAXHEEP];
   double eprime_eth[MAXHEEP], ecalo[MAXHEEP];
   double L1A[MAXHEEP], TS10[MAXHEEP];
   double runnum[1];
@@ -214,6 +221,8 @@ void GetElasticYield( const char *configfilename, const char *chargefile="runCha
   C->SetBranchStatus("sbs.gemFPP.track.*",1);
   C->SetBranchStatus("sbs.tr.*",1);
   R->SetBranchStatus("sbsgep.L1A.scalerRate",1);
+  C->SetBranchStatus("sbs.hcal.*",1);
+
   R->SetBranchStatus("sbsgep.TS10_EcalScint.scalerRate",1);
 
   // Filling Arrays
@@ -222,6 +231,7 @@ void GetElasticYield( const char *configfilename, const char *chargefile="runCha
   C->SetBranchAddress("heep.eprime_eth", eprime_eth);
   C->SetBranchAddress("heep.ecalo", ecalo);
   C->SetBranchAddress("heep.dpp", dpp);
+  C->SetBranchAddress("earm.ecal.x", ecalx);
   C->SetBranchAddress("g.runnum", runnum);
   R->SetBranchAddress("sbsgep.L1A.scalerRate", L1A);
   R->SetBranchAddress("sbsgep.TS10_EcalScint.scalerRate", TS10);
@@ -230,54 +240,85 @@ void GetElasticYield( const char *configfilename, const char *chargefile="runCha
   TFile *fout = new TFile(outfilename, "RECREATE");
 
   // Set up the histograms we want to look at:
-  int bins = 200;   // useful for normalizing later on
+  int bins = 100;   // useful for normalizing later on
   double range = 0.25;
-  TH1D *hdxECAL = new TH1D("hdxECAL", "heep.dxECAL after global cut; heep.dxECAL (m);", bins, -range/2, range/2);
-  TH1D *hdyECAL = new TH1D("hdyECAL", "heep.dyECAL after global cut; heep.dyECAL (m);", bins, -range/2, range/2);
+  //Histograms for course cuts
+  TH1D *hdxECAL = new TH1D("hdxECAL", "heep.dxECAL; heep.dxECAL (m);", bins, -range/2, range/2);
+  TH1D *hdyECAL = new TH1D("hdyECAL", "heep.dyECAL; heep.dyECAL (m);", bins, -range/2, range/2);
 
   TH2D *hdxECAL_v_dyECAL = new TH2D("hdxECAL_v_dyECAL", "heep.dxECAL vs heep.dyECAL ; heep.dyECAL (m); heep.dxECAL (m)", bins/2, -range/2, range/2, bins/2, -range/2, range/2);
+  TH2D *hdxECAL_v_ecalx = new TH2D("hdxECAL_v_ecalx", "heep.dxECAL vs earm.ecal.x ; heep.dxECAL (m); earm.ecal.x (m)", bins/2, -1.5, 1.5, bins/2, -0.15, 0.15);
+  TH2D *hdyECAL_v_ecalx = new TH2D("hdyECAL_v_ecalx", "heep.dyECAL vs earm.ecal.x ; heep.dyECAL (m); earm.ecal.x (m)", bins/2, -1.5, 1.5, bins/2, -0.2, 0.2);
+
+  // Histograms for stricter selection cut
+  TH1D *hdxECAL_cut = new TH1D("hdxECAL", "heep.dxECAL after global cut; heep.dxECAL (m);", bins, -range/2, range/2);
+  TH1D *hdyECAL_cut = new TH1D("hdyECAL", "heep.dyECAL after global cut; heep.dyECAL (m);", bins, -range/2, range/2);
+  TH2D *hdxECAL_v_dyECAL_cut = new TH2D("hdxECAL_v_dyECAL", "heep.dxECAL vs heep.dyECAL after global cut; heep.dyECAL (m); heep.dxECAL (m)", bins/2, -range/2, range/2, bins/2, -range/2, range/2);
 
   TH1D *hEdivP = new TH1D("hEdivP", "E/P after global cut; E/P;", bins, 0.0, 1.3);
   TH1D *hdpp = new TH1D("hdpp", "dpp after global cut; dpp;", bins, -range/2, range/2);
+
   TH1D *hYield = new TH1D("hYield", "Normalized Elastic Yield; N_elastic;", bins, 20000, 40000);
 
+  /**************************************************/
+  /*********** Begin Event Loop and Setup ***********/
+  /**************************************************/
   long nevent=0;
   TTreeFormula *GlobalCut = new TTreeFormula( "GlobalCut", globalcut.GetTitle(), C );
+  TTreeFormula *SelectionCut = new TTreeFormula( "SelectionCut", selectioncut.GetTitle(), C );
 
   int treenum=0, currenttreenum=0;
   int ngoodevs = 0;
   map<int, int> runyield;
+
   while( C->GetEntry( nevent++ ) && nevent){
     currenttreenum = C->GetTreeNumber();
+
+    // Setting up our cuts
     if( nevent == 1 || currenttreenum != treenum ){
       treenum = currenttreenum;
-
       if (GlobalCut) {
         delete GlobalCut;
         GlobalCut = nullptr;
       }
       GlobalCut = new TTreeFormula( "GlobalCut", globalcut.GetTitle(), C );
       GlobalCut->UpdateFormulaLeaves();
+
+      if (SelectionCut) {
+        delete SelectionCut;
+        SelectionCut = nullptr;
+      }
+      SelectionCut = new TTreeFormula( "SelectionCut", selectioncut.GetTitle(), C );
+      SelectionCut->UpdateFormulaLeaves();
     }
    
     if( nevent % 100000 == 0 ) cout << nevent << endl;
     bool passedcut = GlobalCut->EvalInstance(0) != 0;
+    bool passedselection = SelectionCut->EvalInstance(0) != 0;
 
-    if( passedcut ){
-      if( runyield.find(runnum[0]) == runyield.end() ){
-        runyield.insert({runnum[0], 1});
-      }
-      else{
-	runyield[runnum[0]]++;
-      }
-      ngoodevs ++;
+    if( passedcut ){        //Fill histograms for events passing a looser cut first to check quality of later cuts
       hdxECAL->Fill( dxECAL[0]);
       hdyECAL->Fill( dyECAL[0]);
       hdxECAL_v_dyECAL->Fill( dyECAL[0], dxECAL[0]);
-      hEdivP->Fill(ecalo[0]/eprime_eth[0]);
-      hdpp->Fill( dpp[0]);
+
+      hdxECAL_v_ecalx->Fill( ecalx[0], dxECAL[0]);
+      hdyECAL_v_ecalx->Fill( ecalx[0], dyECAL[0]);
+
+      if (passedselection) { //Fill histograms for events passing final cuts and also fill our map of run yields
+        if( runyield.find(runnum[0]) == runyield.end() ){
+          runyield.insert({runnum[0], 1});
+        }
+        else{
+	        runyield[runnum[0]]++;
+        }
+        ngoodevs ++;
+        hEdivP->Fill(ecalo[0]/eprime_eth[0]);
+        hdpp->Fill(dpp[0]);
+        hdxECAL_cut->Fill( dxECAL[0]);
+        hdyECAL_cut->Fill( dyECAL[0]);
+        hdxECAL_v_dyECAL_cut->Fill( dyECAL[0], dxECAL[0]);
+      }
     }
-    
   }
   
   // cout << "Print my map:" << endl;
@@ -350,7 +391,7 @@ void GetElasticYield( const char *configfilename, const char *chargefile="runCha
 	 << ", charge = " << data.charge
 	 << ", normalized yield = " << data.events / data.livetime / data.charge << endl;
     //normyield += data.events / (data.charge * data.livetime);
-    normyield += data.events / data.livetime;
+    normyield += data.events; // / data.livetime;
     totalcharge += data.charge;
     hYield->Fill( data.events / data.livetime / data.charge);
   }
@@ -390,13 +431,32 @@ void GetElasticYield( const char *configfilename, const char *chargefile="runCha
   
   
   // Make some plots for us to look at
+  /*
   TCanvas *c1 = new TCanvas("c1","",1600,1200);
   c1->Divide(2,2);
   c1->cd(1);    hdxECAL->Draw();    fitAllX->Draw("same");    fitBkgrX->Draw("same");    fitSigX->Draw("same");
   c1->cd(2);    hdyECAL->Draw();    fitAllY->Draw("same");    fitBkgrY->Draw("same");    fitSigY->Draw("same");
   c1->cd(3);    hdxECAL_v_dyECAL->Draw();
   c1->cd(4);    hEdivP->Draw();
-  //c1->Update();
+  //c1->Update();*/
+
+  gStyle->SetOptFit(11);
+  TProfile* hdx_ProfX = hdxECAL_v_ecalx->ProfileX();
+  TProfile* hdy_ProfX = hdyECAL_v_ecalx->ProfileX();
+  hdx_ProfX->Fit("pol1", "S");
+  hdy_ProfX->Fit("pol3", "S");
+
+  TCanvas *c1 = new TCanvas("c1","",1600,1200);
+  hdyECAL->SetLineColor(kRed);
+  TLegend *leg1 = new TLegend(0.15, 0.7, 0.35, 0.85);
+  leg1->AddEntry(hdxECAL_cut, "dx ECAL", "l");
+  leg1->AddEntry(hdyECAL_cut, "dy ECAL", "l");
+  c1->Divide(2,2);
+  c1->cd(1);    hdxECAL_v_ecalx->Draw();    hdx_ProfX->Draw("sames");
+  c1->cd(2);    hdyECAL_v_ecalx->Draw();    hdy_ProfX->Draw("sames");
+  c1->cd(3);    hdxECAL_v_dyECAL->Draw();
+  c1->cd(4);    hdxECAL->Draw();            hdyECAL->Draw("same");
+  c1->Update();
   c1->Print(outfilepdf + "(");  //Open the pdf and make the first page
 
   //double ElasticYieldX = (fitSigX->Integral(-1,1))/(range/bins);
@@ -432,10 +492,22 @@ void GetElasticYield( const char *configfilename, const char *chargefile="runCha
   cout << "Number of events = " << (fitAllP->Integral(-range/2,range/2))/(range/bins) << endl;
 
   TCanvas *c2 = new TCanvas("c2","",1600,1200);
-  c2->Divide(1,2);
+  hdyECAL_cut->SetLineColor(kRed);
+  TLegend *leg2 = new TLegend(0.15, 0.7, 0.35, 0.85);
+  leg2->AddEntry(hdxECAL_cut, "dx ECAL", "l");
+  leg2->AddEntry(hdyECAL_cut, "dy ECAL", "l");
+  
+  c2->Divide(2,2);
   c2->cd(1);    hdpp->Draw();    fitAllP->Draw("same");    fitBkgrP->Draw("same");    fitSigP->Draw("same");
-  c2->cd(2);    hYield->Draw();
+  c2->cd(2);    hEdivP->Draw();
+  c2->cd(3);    hdxECAL_v_dyECAL_cut->Draw();
+  c2->cd(4);    hdxECAL_cut->Draw();    hdyECAL_cut->Draw("same");    leg2->Draw();
   c2->Print(outfilepdf + "");
+
+
+  TCanvas *c3 = new TCanvas("c3","",1600,1200);
+  c3->cd(1);    hYield->Draw();
+  c3->Print(outfilepdf + "");
 
 
   /**** Summary Canvas ****/
@@ -450,7 +522,7 @@ void GetElasticYield( const char *configfilename, const char *chargefile="runCha
   pt->AddText(Form("Total # events passed global cuts: %lld", ngoodevs));
   TText *t2 = pt->AddText(" Global cuts: ");
   t2->SetTextColor(kRed);
-  AddWrappedText(pt, globalcut.GetTitle());
+  AddWrappedText(pt, selectioncut.GetTitle());
   TText *t3 = pt->AddText(Form(" Average Charge Normalized Elastic Yield: %.0f", normyield * fsig / totalcharge));
   t3->SetTextColor(kRed);
   pt->AddText(Form(" Signal fraction: %.5f ",fsig));
