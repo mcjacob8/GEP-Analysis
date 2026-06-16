@@ -29,9 +29,32 @@
 #include <vector>
 #include <algorithm>
 #include <iostream>
+#include <fstream>
+#include <map>
 
 //void CompareAPV(const char *filename="/volatile/halla/sbs/mcjacob/GEP/Jan26/rootfiles/gep5_replayed_3585_stream1_1_seg1_1_firstevent0_nevent5000.root", Long64_t event = 99, int module = 4,int mpd = 4, int APV = 8) //58 100 132
 //{
+
+//module id, vtp, fiber, adcID
+struct apvInfoGEM {
+	int gemid, vtp, fiber, adcID;
+
+	void print() const {
+	std::cout 
+	<< "GEMId: " << gemid 
+	<< " VTP: " << vtp
+	<< " Fiber: " << fiber
+	<< " ADC ID: " << adcID
+	<< std::endl;
+	};
+	bool operator<(const apvInfoGEM& other) const {
+	if (gemid != other.gemid) return gemid < other.gemid;
+	if (vtp != other.vtp) return vtp < other.vtp;
+	if (fiber != other.fiber) return fiber < other.fiber;
+	return adcID < other.adcID;
+	}
+};
+
 
 void CompareAPV( const char *configfilename="configElastic.cfg", const char *outfilename="output/APV_time.root"){
 
@@ -72,7 +95,10 @@ void CompareAPV( const char *configfilename="configElastic.cfg", const char *out
   double UTime[MAXHEEP], VTime[MAXHEEP];
   double ADC_ID_U[MAXHEEP], ADC_ID_V[MAXHEEP];
   double mpd_U[MAXHEEP], mpd_V[MAXHEEP];
+  double crate_U[MAXHEEP], crate_V[MAXHEEP];
   double module[MAXHEEP];
+  double trackindexFT[MAXHEEP];
+  double nstripuFT[MAXHEEP], nstripvFT[MAXHEEP];
 
   // Why are the branches disabled here? To make it run FASTER by only activating the ones you need!
   // the * applies it to all branches, the 0 disables those branches. to enable would need to make 1
@@ -91,12 +117,17 @@ void CompareAPV( const char *configfilename="configElastic.cfg", const char *out
 
   // Filling Arrays
   C->SetBranchAddress("sbs.gemFT.hit.mpd_V", mpd_V);
+  C->SetBranchAddress("sbs.gemFT.hit.crate_V", crate_V);
   C->SetBranchAddress("sbs.gemFT.hit.adc_id_V", ADC_ID_V);
   C->SetBranchAddress("sbs.gemFT.hit.Vtime", VTime);
   C->SetBranchAddress("sbs.gemFT.hit.mpd_U", mpd_U);
+  C->SetBranchAddress("sbs.gemFT.hit.crate_U", crate_U);
   C->SetBranchAddress("sbs.gemFT.hit.adc_id_U", ADC_ID_U);
   C->SetBranchAddress("sbs.gemFT.hit.Utime", UTime);
   C->SetBranchAddress("sbs.gemFT.hit.module", module);
+  C->SetBranchAddress("sbs.gemFT.hit.trackindex", trackindexFT);
+  C->SetBranchAddress("sbs.gemFT.hit.nstripu",nstripuFT);
+  C->SetBranchAddress("sbs.gemFT.hit.nstripv",nstripvFT);
 
   TFile *fout = new TFile(outfilename, "RECREATE");
 
@@ -126,6 +157,8 @@ void CompareAPV( const char *configfilename="configElastic.cfg", const char *out
   int treenum=0, currenttreenum=0;
   int ngoodevs = 0;
 
+  std::map<apvInfoGEM, TH1D*> hTime;
+
   while( C->GetEntry( nevent++ ) && nevent){
     currenttreenum = C->GetTreeNumber();
 
@@ -139,11 +172,129 @@ void CompareAPV( const char *configfilename="configElastic.cfg", const char *out
       GlobalCut = new TTreeFormula( "GlobalCut", globalcut.GetTitle(), C );
       GlobalCut->UpdateFormulaLeaves();
     }
-   
     if( nevent % 10000 == 0 ) cout << nevent << endl;
     bool passedcut = GlobalCut->EvalInstance(0) != 0;
 
     if( passedcut ){        //Fill histograms for events passing a looser cut first to check quality of later cuts
+      for (int i = 0; i < MAXHEEP; i++) {
+
+        // Create histogram if first time seeing this APV
+        if( int(trackindexFT[i]) == 0 && nstripuFT[i]>1&&nstripvFT[i]>1 ){
+          apvInfoGEM key;
+          key.gemid = module[i];
+          key.vtp   = crate_U[i];
+          key.fiber = mpd_U[i];
+          key.adcID = ADC_ID_U[i];
+
+          if (hTime.find(key) == hTime.end()) {
+            TString hname = Form(
+              "hTime_M%d_VTP%d_F%d_ADC%d",
+              key.gemid,
+              key.vtp,
+              key.fiber,
+              key.adcID
+            );
+            TString htitle = Form(
+              "Module %d VTP %d Fiber %d ADC %d;Time;Counts",
+              key.gemid,
+              key.vtp,
+              key.fiber,
+              key.adcID
+            );
+            hTime[key] = new TH1D(
+              hname,
+              htitle,
+              200,   // bins
+              -50,   // xmin
+              150    // xmax
+            );
+          }
+          hTime[key]->Fill(UTime[i]);
+          
+          // Repeat for V side
+          key.vtp   = crate_V[i];
+          key.fiber = mpd_V[i];
+          key.adcID = ADC_ID_V[i];
+
+          if (hTime.find(key) == hTime.end()) {
+            TString hname = Form(
+              "hTime_M%d_VTP%d_F%d_ADC%d",
+              key.gemid,
+              key.vtp,
+              key.fiber,
+              key.adcID
+            );
+            TString htitle = Form(
+              "Module %d VTP %d Fiber %d ADC %d;Time;Counts",
+              key.gemid,
+              key.vtp,
+              key.fiber,
+              key.adcID
+            );
+            hTime[key] = new TH1D(
+              hname,
+              htitle,
+              200,   // bins
+              -50,   // xmin
+              150    // xmax
+            );
+          }
+          hTime[key]->Fill(VTime[i]);
+        }
+      }
+    }
+  }
+
+  // Now we fit these histograms and store the mean time values
+  std::map<apvInfoGEM, double> APVMean;
+
+  for (auto const& entry : hTime) {
+    const apvInfoGEM& key = entry.first;
+    TH1D* h = entry.second;
+
+    if (h->GetEntries() < 100) continue;
+
+    double peak = h->GetBinCenter(h->GetMaximumBin());
+    TF1 gaus("gaus","gaus", peak - 13, peak + 13);
+    h->Fit(&gaus,"RQ");
+
+    double mean = gaus.GetParameter(1);
+
+    APVMean[key] = mean;
+  }
+
+
+  //Create a root file to save these histograms to
+  for (auto const& histpair : hTime) {
+    histpair.second->Write();
+  }
+  fout->Close();
+
+  std::ofstream outfile("APVMeanTimes.txt");
+
+  outfile << "# Module VTP Fiber APV MeanTime\n";
+
+  for (auto const& entry : APVMean) {
+
+    const apvInfoGEM& key = entry.first;
+    double mean = entry.second;
+
+    outfile
+        << key.gemid << " "
+        << key.vtp   << " "
+        << key.fiber << " "
+        << key.adcID << " "
+        << mean
+        << "\n";
+  }
+
+  outfile.close();
+
+}
+  
+    
+    
+    
       //M2 V strip if fiber = 8 -> Fill
       //M2 U strip if fiber = 10 -> Fill
       //M3 V strip if fiber = 0 -> Fill
@@ -156,42 +307,43 @@ void CompareAPV( const char *configfilename="configElastic.cfg", const char *out
           //Fill (adcid vs Utime)
           //etc.
 
-      for (int i = 0; i < MAXHEEP; i++) {
+      /*for (int i = 0; i < MAXHEEP; i++) {
 
         int mod = module[i];
-
-        switch(mod) {
-          case 2: {
-            int offsetV = (mpd_V[i] == 9) ? 15 : 0;
-            hFTM2_APV_v_Vtime->Fill(offsetV + ADC_ID_V[i], VTime[i]);
-            int offsetU = (mpd_U[i] == 11) ? 15 : 0;
-            hFTM2_APV_v_Utime->Fill(offsetU + ADC_ID_U[i], UTime[i]);
-            break;
+        if( int(trackindexFT[i]) == 0 && nstripuFT[i]>1&&nstripvFT[i]>1 ){
+          switch(mod) {
+            case 2: {
+              int offsetV = (mpd_V[i] == 9) ? 15 : 0;
+              hFTM2_APV_v_Vtime->Fill(offsetV + ADC_ID_V[i], VTime[i]);
+              int offsetU = (mpd_U[i] == 11) ? 15 : 0;
+              hFTM2_APV_v_Utime->Fill(offsetU + ADC_ID_U[i], UTime[i]);
+              break;
+            }
+            case 3: {
+              int offsetV = (mpd_V[i] == 1) ? 15 : 0;
+              hFTM3_APV_v_Vtime->Fill(offsetV + ADC_ID_V[i], VTime[i]);
+              int offsetU = (mpd_U[i] == 3) ? 15 : 0;
+              hFTM3_APV_v_Utime->Fill(offsetU + ADC_ID_U[i], UTime[i]);
+              break;
+            }
+            case 4: {
+              int offsetV = (mpd_V[i] == 5) ? 15 : 0;
+              hFTM4_APV_v_Vtime->Fill(offsetV + ADC_ID_V[i], VTime[i]);
+              int offsetU = (mpd_U[i] == 8) ? 15 : 0;
+              hFTM4_APV_v_Utime->Fill(offsetU + ADC_ID_U[i], UTime[i]);
+              break;
+            }
+            case 5: {
+              int offsetV = (mpd_V[i] == 10) ? 15 : 0;
+              hFTM5_APV_v_Vtime->Fill(offsetV + ADC_ID_V[i], VTime[i]);
+              int offsetU = (mpd_U[i] == 0) ? 15 : 0;
+              hFTM5_APV_v_Utime->Fill(offsetU + ADC_ID_U[i], UTime[i]);
+              break;
+            }
+            default:
+              continue;
           }
-          case 3: {
-            int offsetV = (mpd_V[i] == 1) ? 15 : 0;
-            hFTM3_APV_v_Vtime->Fill(offsetV + ADC_ID_V[i], VTime[i]);
-            int offsetU = (mpd_U[i] == 3) ? 15 : 0;
-            hFTM3_APV_v_Utime->Fill(offsetU + ADC_ID_U[i], UTime[i]);
-            break;
-          }
-          case 4: {
-            int offsetV = (mpd_V[i] == 5) ? 15 : 0;
-            hFTM4_APV_v_Vtime->Fill(offsetV + ADC_ID_V[i], VTime[i]);
-            int offsetU = (mpd_U[i] == 8) ? 15 : 0;
-            hFTM4_APV_v_Utime->Fill(offsetU + ADC_ID_U[i], UTime[i]);
-            break;
-          }
-          case 5: {
-            int offsetV = (mpd_V[i] == 10) ? 15 : 0;
-            hFTM5_APV_v_Vtime->Fill(offsetV + ADC_ID_V[i], VTime[i]);
-            int offsetU = (mpd_U[i] == 0) ? 15 : 0;
-            hFTM5_APV_v_Utime->Fill(offsetU + ADC_ID_U[i], UTime[i]);
-            break;
-          }
-          default:
-            continue;
-        }
+        }*/
 
 
         /*
@@ -235,7 +387,7 @@ void CompareAPV( const char *configfilename="configElastic.cfg", const char *out
         } else {
           continue; // Skip if not one of the specified conditions
         }*/
-      }
+/*      }
     }
   }
 
@@ -289,4 +441,4 @@ void CompareAPV( const char *configfilename="configElastic.cfg", const char *out
 
   fout->Write();
   cout << "That's all folks!" << endl;
-}
+}*/
